@@ -44,17 +44,16 @@ jobs:
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
 
-      - name: Add Github Nuget Source
+      - name: Restore packages
         env:
           NUGET_PAT: ${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
-        run: dotnet nuget add source --username "${{ vars.NUGET_USERNAME }}" --password "$NUGET_PAT" --store-password-in-clear-text --name github "${{ vars.NUGET_SOURCE_URL }}"
-
-      - name: Restore packages
-        run: dotnet restore ${{ inputs.restore-project }}
-
-      - name: Remove NuGet credentials
-        if: always()
-        run: dotnet nuget remove source github || true
+          NUGET_USERNAME: ${{ vars.NUGET_USERNAME }}
+          NUGET_SOURCE_URL: ${{ vars.NUGET_SOURCE_URL }}
+          RESTORE_PROJECT: ${{ inputs.restore-project }}
+        run: |
+          dotnet nuget add source --username "$NUGET_USERNAME" --password "$NUGET_PAT" --store-password-in-clear-text --name github "$NUGET_SOURCE_URL"
+          dotnet restore $RESTORE_PROJECT
+          dotnet nuget remove source github
 
       - name: Qodana Scan
         id: qodana

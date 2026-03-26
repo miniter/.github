@@ -62,7 +62,9 @@ jobs:
           allow-no-subscriptions: true
 
       - name: Login to ACR via OIDC
-        run: az acr login --name "${{ vars.ACR_NAME }}"
+        run: az acr login --name "$ACR_NAME"
+        env:
+          ACR_NAME: ${{ vars.ACR_NAME }}
 
       - name: Calculate version
         id: version
@@ -80,8 +82,8 @@ jobs:
           cache-from: ${{ inputs.docker-cache && 'type=gha' || '' }}
           cache-to: ${{ inputs.docker-cache && 'type=gha,mode=max' || '' }}
           build-args: |
-            "BUILD_VERSION=${{ steps.version.outputs.version }}"
-            "PRODUCT_NAME=${{ inputs.product-name }}"
+            BUILD_VERSION=${{ steps.version.outputs.version }}
+            PRODUCT_NAME=${{ inputs.product-name }}
           secrets: |
             MINITER_PACKAGES_PAT=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
             nuget_pat=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}

@@ -93,18 +93,23 @@ jobs:
         if: inputs.add-nuget-source
         env:
           NUGET_PAT: ${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
-        run: dotnet nuget add source --username "${{ vars.NUGET_USERNAME }}" --password "$NUGET_PAT" --store-password-in-clear-text --name github "${{ vars.NUGET_SOURCE_URL }}"
+          NUGET_USERNAME: ${{ vars.NUGET_USERNAME }}
+          NUGET_SOURCE_URL: ${{ vars.NUGET_SOURCE_URL }}
+        run: dotnet nuget add source --username "$NUGET_USERNAME" --password "$NUGET_PAT" --store-password-in-clear-text --name github "$NUGET_SOURCE_URL"
 
       - name: Run Tests
         if: inputs.run-tests
         working-directory: ${{ inputs.test-working-directory }}
+        env:
+          TEST_FILTER: ${{ inputs.test-filter }}
         run: dotnet test --configuration Release ${{ inputs.test-filter && format('--filter "{0}"', inputs.test-filter) || '' }}
 
       - name: Build and Pack
         working-directory: ${{ inputs.working-directory }}
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.version }}
-        run: dotnet pack ${{ inputs.project-file }} --configuration Release --output "$GITHUB_WORKSPACE/Artifacts" /p:Version="$PACKAGE_VERSION" /p:ContinuousIntegrationBuild=true
+          PROJECT_FILE: ${{ inputs.project-file }}
+        run: dotnet pack $PROJECT_FILE --configuration Release --output "$GITHUB_WORKSPACE/Artifacts" /p:Version="$PACKAGE_VERSION" /p:ContinuousIntegrationBuild=true
 
       - name: Cleanup NuGet credentials
         if: always()
@@ -112,6 +117,7 @@ jobs:
 
       - name: Publish the package to GPR
         if: github.ref == 'refs/heads/master'
-        run: dotnet nuget push "$GITHUB_WORKSPACE/Artifacts"/*.nupkg -k "$NUGET_AUTH_TOKEN" -s "${{ vars.NUGET_SOURCE_URL }}"
         env:
           NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUGET_SOURCE_URL: ${{ vars.NUGET_SOURCE_URL }}
+        run: dotnet nuget push "$GITHUB_WORKSPACE/Artifacts"/*.nupkg -k "$NUGET_AUTH_TOKEN" -s "$NUGET_SOURCE_URL"
