@@ -1,0 +1,138 @@
+name: Container Build
+on:
+  workflow_call:
+    inputs:
+      product-name:
+        description: "Root product name for the container"
+        required: true
+        type: string
+      container-name:
+        description: "Container registry path segment"
+        required: true
+        type: string
+      project-folder:
+        description: "Directory containing the Dockerfile"
+        required: true
+        type: string
+      octopus-project:
+        description: "Octopus Deploy project name"
+        required: true
+        type: string
+      environment:
+        description: "UAT environment to deploy to (from workflow_dispatch)"
+        required: false
+        type: string
+        default: ""
+      action:
+        description: "Deploy action (Deploy or Build)"
+        required: false
+        type: string
+        default: ""
+      timeout-minutes:
+        description: "Job timeout in minutes"
+        required: false
+        type: number
+        default: 30
+      docker-cache:
+        description: "Enable Docker layer caching via GHA"
+        required: false
+        type: boolean
+        default: true
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    environment: standard
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+
+      - name: Log in to Azure
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_GITHUB_ACTION }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID_MINITER }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_PROD }}
+          allow-no-subscriptions: true
+
+      - name: Login to ACR via OIDC
+        run: az acr login --name "${{ vars.ACR_NAME }}"
+
+      - name: Calculate version
+        id: version
+        uses: waynebrantley/github-dateversion@f6dc23a5c03c208636ae652059573c357ae2f050 # v1
+
+      - name: Build and push container image to registry
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
+        env:
+          DOCKER_BUILD_SUMMARY: false
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          push: true
+          tags: ${{ vars.MINITER_CONTAINER_REGISTRY_PATH }}/${{ inputs.container-name }}:${{ steps.version.outputs.version }}
+          file: "${{ inputs.project-folder }}/Dockerfile"
+          cache-from: ${{ inputs.docker-cache && 'type=gha' || '' }}
+          cache-to: ${{ inputs.docker-cache && 'type=gha,mode=max' || '' }}
+          build-args: |
+            "BUILD_VERSION=${{ steps.version.outputs.version }}"
+            "PRODUCT_NAME=${{ inputs.product-name }}"
+          secrets: |
+            MINITER_PACKAGES_PAT=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+
+      - name: Create Release Notes
+        run: printf '%s\n' "$COMMIT_MSG" > releasenotes.txt
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+
+      - name: Push build information to Octopus Deploy
+        if: github.ref == 'refs/heads/master'
+        uses: OctopusDeploy/push-build-information-action@13dace5eb38d7d5dc639a8bddc83829fb95d04e4 # v4
+        env:
+          OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
+          OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+        with:
+          packages: ${{ inputs.container-name }}
+          version: ${{ steps.version.outputs.version }}
+
+      - name: Create a release in Production for Octopus Deploy
+        uses: OctopusDeploy/create-release-action@f05ba34acdbaf5a8be40831285a4051b2b595ff2 # v4
+        if: github.ref == 'refs/heads/master'
+        env:
+          OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
+          OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+        with:
+          project: ${{ inputs.octopus-project }}
+          release_number: ${{ steps.version.outputs.version }}
+          channel: Production
+          release_notes_file: releasenotes.txt
+
+      - name: Create a release in UAT Octopus Deploy
+        uses: OctopusDeploy/create-release-action@f05ba34acdbaf5a8be40831285a4051b2b595ff2 # v4
+        if: github.ref != 'refs/heads/master'
+        env:
+          OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
+          OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+        with:
+          project: ${{ inputs.octopus-project }}
+          release_number: ${{ steps.version.outputs.version }}
+          channel: UAT
+          release_notes_file: releasenotes.txt
+
+      - name: Deploy to Environment
+        if: inputs.environment != '' && inputs.action == 'Deploy'
+        uses: OctopusDeploy/deploy-release-action@f23325841e564d05b3919dbdd27c2a2569a56e88 # v4
+        env:
+          OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
+          OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+        with:
+          project: ${{ inputs.octopus-project }}
+          release_number: ${{ steps.version.outputs.version }}
+          environments: UAT
+          variables: |
+            Environment:${{ inputs.environment }}

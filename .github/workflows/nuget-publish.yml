@@ -1,0 +1,107 @@
+name: NuGet Publish
+on:
+  workflow_call:
+    inputs:
+      product-version:
+        description: "Package base version (e.g., 6.2)"
+        required: true
+        type: string
+      working-directory:
+        description: "Directory containing the project to pack"
+        required: false
+        type: string
+        default: "."
+      project-file:
+        description: "Specific .csproj file to pack (empty for default)"
+        required: false
+        type: string
+        default: ""
+      run-tests:
+        description: "Run dotnet test before pack"
+        required: false
+        type: boolean
+        default: false
+      test-working-directory:
+        description: "Directory for test execution (only used when run-tests is true)"
+        required: false
+        type: string
+        default: "."
+      add-nuget-source:
+        description: "Add private GitHub Packages NuGet source"
+        required: false
+        type: boolean
+        default: true
+      base-number-subtraction:
+        description: "Base number for run number subtraction in version calc"
+        required: false
+        type: string
+        default: ""
+      dotnet-version:
+        description: ".NET SDK version (empty for default)"
+        required: false
+        type: string
+        default: ""
+      timeout-minutes:
+        description: "Job timeout in minutes"
+        required: false
+        type: number
+        default: 15
+
+permissions: {}
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      checks: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Calculate version
+        id: version
+        uses: waynebrantley/github-branchversion@4edb9292e8b4ac508b0b0bffc29a84f8a2a0fd1a # v1
+        with:
+          base-version: ${{ inputs.product-version }}
+          base-number-for-subtraction-from-run-number: ${{ inputs.base-number-subtraction }}
+
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+          cache: true
+          cache-dependency-path: "**/*.csproj"
+
+      - name: Add Github Nuget Source
+        if: inputs.add-nuget-source
+        env:
+          NUGET_PAT: ${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+        run: dotnet nuget add source --username "${{ vars.NUGET_USERNAME }}" --password "$NUGET_PAT" --store-password-in-clear-text --name github "${{ vars.NUGET_SOURCE_URL }}"
+
+      - name: Run Tests
+        if: inputs.run-tests
+        working-directory: ${{ inputs.test-working-directory }}
+        run: dotnet test --configuration Release
+
+      - name: Build and Pack
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: dotnet pack ${{ inputs.project-file }} --configuration Release --output "$GITHUB_WORKSPACE/Artifacts" /p:Version="$PACKAGE_VERSION" /p:ContinuousIntegrationBuild=true
+
+      - name: Cleanup NuGet credentials
+        if: always()
+        run: dotnet nuget remove source github || true
+
+      - name: Publish the package to GPR
+        if: github.ref == 'refs/heads/master'
+        run: dotnet nuget push "$GITHUB_WORKSPACE/Artifacts"/*.nupkg -k "$NUGET_AUTH_TOKEN" -s "${{ vars.NUGET_SOURCE_URL }}"
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

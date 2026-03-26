@@ -1,0 +1,94 @@
+name: Quality Gate
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        description: ".NET SDK version"
+        required: false
+        type: string
+        default: "10.x"
+      restore-project:
+        description: "Specific .csproj to restore (empty for full solution)"
+        required: false
+        type: string
+        default: ""
+      qodana-fail-threshold:
+        description: "Qodana failure threshold (0 = fail on any violation)"
+        required: false
+        type: string
+        default: "0"
+      timeout-minutes:
+        description: "Job timeout in minutes"
+        required: false
+        type: number
+        default: 20
+
+permissions: {}
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: ${{ github.event.pull_request.commits }}
+
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Add Github Nuget Source
+        env:
+          NUGET_PAT: ${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+        run: dotnet nuget add source --username "${{ vars.NUGET_USERNAME }}" --password "$NUGET_PAT" --store-password-in-clear-text --name github "${{ vars.NUGET_SOURCE_URL }}"
+
+      - name: Restore packages
+        run: dotnet restore ${{ inputs.restore-project }}
+
+      - name: Remove NuGet credentials
+        if: always()
+        run: dotnet nuget remove source github || true
+
+      - name: Qodana Scan
+        id: qodana
+        continue-on-error: true
+        uses: JetBrains/qodana-action@89eb4357efd2b52e639f3216e63edaf33b82622b # v2025.3.2
+        with:
+          pr-mode: false
+          args: --fail-threshold=${{ inputs.qodana-fail-threshold }}
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+
+      - name: Extract Qodana violations
+        if: always() && steps.qodana.outcome == 'failure'
+        env:
+          SARIF_PATH: ${{ runner.temp }}/qodana/results/qodana.sarif.json
+        run: |
+          if [ -f "$SARIF_PATH" ]; then
+            jq '[.runs[].results[] | {ruleId, level, message: .message.text, file: .locations[0].physicalLocation.artifactLocation.uri, line: .locations[0].physicalLocation.region.startLine}]' "$SARIF_PATH" > qodana-violations.json
+            echo "### Qodana violations" >> "$GITHUB_STEP_SUMMARY"
+            jq -r '.[] | "- **\(.ruleId)** (\(.level)) \(.file):\(.line) — \(.message)"' qodana-violations.json >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::SARIF file not found at $SARIF_PATH"
+          fi
+
+      - name: Upload Qodana SARIF
+        if: always() && steps.qodana.outcome == 'failure'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: qodana-sarif
+          path: |
+            ${{ runner.temp }}/qodana/results/qodana.sarif.json
+            qodana-violations.json
+          retention-days: 7
+
+      - name: Fail on Qodana violations
+        if: always() && steps.qodana.outcome == 'failure'
+        run: exit 1
