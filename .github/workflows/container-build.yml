@@ -82,7 +82,6 @@ jobs:
           build-args: |
             "BUILD_VERSION=${{ steps.version.outputs.version }}"
             "PRODUCT_NAME=${{ inputs.product-name }}"
-            "MINITER_PACKAGES_PAT=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}"
           secrets: |
             MINITER_PACKAGES_PAT=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
             nuget_pat=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
