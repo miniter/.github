@@ -84,6 +84,7 @@ jobs:
             "PRODUCT_NAME=${{ inputs.product-name }}"
           secrets: |
             MINITER_PACKAGES_PAT=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+            nuget_pat=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
 
       - name: Create Release Notes
         run: printf '%s\n' "$COMMIT_MSG" > releasenotes.txt
