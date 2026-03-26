@@ -97,6 +97,7 @@ jobs:
         env:
           OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
           OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+          OCTOPUS_SPACE: Default
         with:
           packages: ${{ inputs.container-name }}
           version: ${{ steps.version.outputs.version }}
@@ -107,6 +108,7 @@ jobs:
         env:
           OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
           OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+          OCTOPUS_SPACE: Default
         with:
           project: ${{ inputs.octopus-project }}
           release_number: ${{ steps.version.outputs.version }}
@@ -119,6 +121,7 @@ jobs:
         env:
           OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
           OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+          OCTOPUS_SPACE: Default
         with:
           project: ${{ inputs.octopus-project }}
           release_number: ${{ steps.version.outputs.version }}
@@ -131,6 +134,7 @@ jobs:
         env:
           OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
           OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
+          OCTOPUS_SPACE: Default
         with:
           project: ${{ inputs.octopus-project }}
           release_number: ${{ steps.version.outputs.version }}
