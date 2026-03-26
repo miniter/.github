@@ -26,6 +26,11 @@ on:
         required: false
         type: string
         default: "."
+      test-filter:
+        description: "dotnet test --filter expression (e.g., TestCategory!=RequireSql)"
+        required: false
+        type: string
+        default: ""
       add-nuget-source:
         description: "Add private GitHub Packages NuGet source"
         required: false
@@ -46,12 +51,17 @@ on:
         required: false
         type: number
         default: 15
+      globalization-invariant:
+        description: "Set DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true (disable for culture-dependent tests)"
+        required: false
+        type: boolean
+        default: true
 
 permissions: {}
 
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
-  DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: true
+  DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: ${{ inputs.globalization-invariant }}
 
 jobs:
   build:
@@ -88,7 +98,7 @@ jobs:
       - name: Run Tests
         if: inputs.run-tests
         working-directory: ${{ inputs.test-working-directory }}
-        run: dotnet test --configuration Release
+        run: dotnet test --configuration Release ${{ inputs.test-filter && format('--filter "{0}"', inputs.test-filter) || '' }}
 
       - name: Build and Pack
         working-directory: ${{ inputs.working-directory }}
