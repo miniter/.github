@@ -68,7 +68,7 @@ jobs:
 
       - name: Calculate version
         id: version
-        uses: waynebrantley/github-dateversion@f6dc23a5c03c208636ae652059573c357ae2f050 # v1
+        uses: waynebrantley/github-dateversion@500a72f15f862e94fa43605145901c858c4a2a45 # v1
 
       - name: Build and push container image to registry
         uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
