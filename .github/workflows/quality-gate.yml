@@ -32,12 +32,17 @@ on:
         required: false
         type: string
         default: ""
+      runs-on:
+        description: "Runner label for the quality job"
+        required: false
+        type: string
+        default: "ubuntu-latest"
 
 permissions: {}
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
       contents: write
