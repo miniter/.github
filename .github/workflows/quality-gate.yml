@@ -22,6 +22,16 @@ on:
         required: false
         type: number
         default: 20
+      enable-format:
+        description: "Enable dotnet format auto-fix (caller must grant contents: write)"
+        required: false
+        type: boolean
+        default: false
+      solution-file:
+        description: "Solution file for dotnet format (e.g. MyApp.sln). Required when enable-format is true."
+        required: false
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -30,13 +40,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
-      contents: read
+      contents: write
       checks: write
       pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
+          ref: ${{ inputs.enable-format && github.head_ref || '' }}
           fetch-depth: ${{ github.event.pull_request.commits }}
 
       - name: Setup dotnet
@@ -54,6 +65,27 @@ jobs:
           dotnet nuget add source --username "$NUGET_USERNAME" --password "$NUGET_PAT" --store-password-in-clear-text --name github "$NUGET_SOURCE_URL"
           dotnet restore $RESTORE_PROJECT
           dotnet nuget remove source github
+
+      - name: Run dotnet format
+        if: ${{ inputs.enable-format }}
+        run: dotnet format ${{ inputs.solution-file }} --severity warn
+
+      - name: Commit formatting changes
+        if: ${{ inputs.enable-format }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No formatting changes needed."
+          else
+            git commit -m "Apply dotnet format"
+            git push
+          fi
+
+      - name: Verify no remaining format violations
+        if: ${{ inputs.enable-format }}
+        run: dotnet format ${{ inputs.solution-file }} --severity warn --verify-no-changes
 
       - name: Qodana Scan
         id: qodana
