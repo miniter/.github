@@ -73,7 +73,7 @@ jobs:
 
       - name: Run dotnet format
         if: ${{ inputs.enable-format }}
-        run: dotnet format ${{ inputs.solution-file }} --severity warn
+        run: dotnet format ${{ inputs.solution-file }} --no-restore --severity warn
 
       - name: Commit formatting changes
         if: ${{ inputs.enable-format }}
@@ -90,7 +90,7 @@ jobs:
 
       - name: Verify no remaining format violations
         if: ${{ inputs.enable-format }}
-        run: dotnet format ${{ inputs.solution-file }} --severity warn --verify-no-changes
+        run: dotnet format ${{ inputs.solution-file }} --no-restore --severity warn --verify-no-changes
 
       - name: Qodana Scan
         id: qodana
