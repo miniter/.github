@@ -38,20 +38,25 @@ on:
         required: false
         type: boolean
         default: true
+      runs-on:
+        description: "Runner label for the build job"
+        required: false
+        type: string
+        default: "ubuntu-latest"
 
 permissions: {}
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     environment: standard
     permissions:
       id-token: write
       contents: read
     steps:
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - name: Setup Docker Builder
+        uses: useblacksmith/setup-docker-builder@5241b2e9423e8b1fa37ed6050ecb62d0fb9a4e38 # v1
 
       - name: Log in to Azure
         uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
@@ -70,23 +75,39 @@ jobs:
         id: version
         uses: waynebrantley/github-dateversion@500a72f15f862e94fa43605145901c858c4a2a45 # v1
 
-      - name: Build and push container image to registry
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
+      - name: Build container image
+        uses: useblacksmith/build-push-action@cbd1f60d194a98cb3be5523b15134501eaf0fbf3 # v2
         env:
           DOCKER_BUILD_SUMMARY: false
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
-          push: true
+          push: false
+          load: true
           tags: ${{ vars.MINITER_CONTAINER_REGISTRY_PATH }}/${{ inputs.container-name }}:${{ steps.version.outputs.version }}
           file: "${{ inputs.project-folder }}/Dockerfile"
           cache-from: ${{ inputs.docker-cache && 'type=gha' || '' }}
-          cache-to: ${{ inputs.docker-cache && 'type=gha,mode=max' || '' }}
+          cache-to: ${{ inputs.docker-cache && github.ref == 'refs/heads/master' && 'type=gha,mode=max' || '' }}
           build-args: |
             BUILD_VERSION=${{ steps.version.outputs.version }}
             PRODUCT_NAME=${{ inputs.product-name }}
           secrets: |
             MINITER_PACKAGES_PAT=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
             nuget_pat=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+
+      - name: Push container image to registry
+        env:
+          REGISTRY_PATH: ${{ vars.MINITER_CONTAINER_REGISTRY_PATH }}
+          IMAGE_NAME: ${{ inputs.container-name }}
+          IMAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG="${REGISTRY_PATH}/${IMAGE_NAME}:${IMAGE_VERSION}"
+          for attempt in 1 2 3; do
+            docker push "$TAG" && exit 0
+            echo "::warning::Push attempt $attempt failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::All push attempts failed"
+          exit 1
 
       - name: Create Release Notes
         run: printf '%s\n' "$COMMIT_MSG" > releasenotes.txt
