@@ -38,6 +38,11 @@ on:
         required: false
         type: boolean
         default: true
+      docker-cache-mode:
+        description: "Cache export mode: min (final layers only) or max (all layers including intermediate stages)"
+        required: false
+        type: string
+        default: "min"
       runs-on:
         description: "Runner label for the build job"
         required: false
@@ -86,7 +91,7 @@ jobs:
           tags: ${{ vars.MINITER_CONTAINER_REGISTRY_PATH }}/${{ inputs.container-name }}:${{ steps.version.outputs.version }}
           file: "${{ inputs.project-folder }}/Dockerfile"
           cache-from: ${{ inputs.docker-cache && 'type=gha' || '' }}
-          cache-to: ${{ inputs.docker-cache && github.ref == 'refs/heads/master' && 'type=gha,mode=max' || '' }}
+          cache-to: ${{ inputs.docker-cache && github.ref == 'refs/heads/master' && format('type=gha,mode={0}', inputs.docker-cache-mode) || '' }}
           build-args: |
             BUILD_VERSION=${{ steps.version.outputs.version }}
             PRODUCT_NAME=${{ inputs.product-name }}
