@@ -91,7 +91,9 @@ jobs:
         with:
           push: false
           load: true
-          tags: ${{ vars.MINITER_CONTAINER_REGISTRY_PATH }}/${{ inputs.container-name }}:${{ steps.version.outputs.version }}
+          tags: |
+            ${{ vars.MINITER_CONTAINER_REGISTRY_PATH }}/${{ inputs.container-name }}:${{ steps.version.outputs.version }}
+            ${{ github.ref == 'refs/heads/master' && format('{0}/{1}:latest', vars.MINITER_CONTAINER_REGISTRY_PATH, inputs.container-name) || '' }}
           file: "${{ inputs.project-folder }}/Dockerfile"
           cache-from: ${{ inputs.docker-cache && 'type=gha' || '' }}
           cache-to: ${{ inputs.docker-cache && github.ref == 'refs/heads/master' && format('type=gha,mode={0}', inputs.docker-cache-mode) || '' }}
@@ -107,15 +109,27 @@ jobs:
           REGISTRY_PATH: ${{ vars.MINITER_CONTAINER_REGISTRY_PATH }}
           IMAGE_NAME: ${{ inputs.container-name }}
           IMAGE_VERSION: ${{ steps.version.outputs.version }}
+          IS_MASTER: ${{ github.ref == 'refs/heads/master' }}
         run: |
-          TAG="${REGISTRY_PATH}/${IMAGE_NAME}:${IMAGE_VERSION}"
-          for attempt in 1 2 3; do
-            docker push "$TAG" && exit 0
-            echo "::warning::Push attempt $attempt failed, retrying in 10s..."
-            sleep 10
+          TAGS=("${REGISTRY_PATH}/${IMAGE_NAME}:${IMAGE_VERSION}")
+          if [[ "$IS_MASTER" == "true" ]]; then
+            TAGS+=("${REGISTRY_PATH}/${IMAGE_NAME}:latest")
+          fi
+          for TAG in "${TAGS[@]}"; do
+            pushed=false
+            for attempt in 1 2 3; do
+              if docker push "$TAG"; then
+                pushed=true
+                break
+              fi
+              echo "::warning::Push attempt $attempt for $TAG failed, retrying in 10s..."
+              sleep 10
+            done
+            if [[ "$pushed" != "true" ]]; then
+              echo "::error::All push attempts failed for $TAG"
+              exit 1
+            fi
           done
-          echo "::error::All push attempts failed"
-          exit 1
 
       - name: Create Release Notes
         run: printf '%s\n' "$COMMIT_MSG" > releasenotes.txt
