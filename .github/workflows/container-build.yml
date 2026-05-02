@@ -63,8 +63,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - name: Setup Docker Builder
+      - name: Setup Docker Builder (Blacksmith)
+        if: contains(runner.name, 'blacksmith')
         uses: useblacksmith/setup-docker-builder@5241b2e9423e8b1fa37ed6050ecb62d0fb9a4e38 # v1
+
+      - name: Setup Docker Buildx
+        if: ${{ !contains(runner.name, 'blacksmith') }}
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Log in to Azure
         uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
@@ -83,8 +88,31 @@ jobs:
         id: version
         uses: waynebrantley/github-dateversion@500a72f15f862e94fa43605145901c858c4a2a45 # v1
 
-      - name: Build container image
+      - name: Build container image (Blacksmith)
+        if: contains(runner.name, 'blacksmith')
         uses: useblacksmith/build-push-action@cbd1f60d194a98cb3be5523b15134501eaf0fbf3 # v2
+        env:
+          DOCKER_BUILD_SUMMARY: false
+          DOCKER_BUILD_RECORD_UPLOAD: false
+        with:
+          push: false
+          load: true
+          tags: |
+            ${{ vars.MINITER_CONTAINER_REGISTRY_PATH }}/${{ inputs.container-name }}:${{ steps.version.outputs.version }}
+            ${{ github.ref == 'refs/heads/master' && format('{0}/{1}:latest', vars.MINITER_CONTAINER_REGISTRY_PATH, inputs.container-name) || '' }}
+          file: "${{ inputs.project-folder }}/Dockerfile"
+          cache-from: ${{ inputs.docker-cache && 'type=gha' || '' }}
+          cache-to: ${{ inputs.docker-cache && github.ref == 'refs/heads/master' && format('type=gha,mode={0}', inputs.docker-cache-mode) || '' }}
+          build-args: |
+            BUILD_VERSION=${{ steps.version.outputs.version }}
+            PRODUCT_NAME=${{ inputs.product-name }}
+          secrets: |
+            MINITER_PACKAGES_PAT=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+            nuget_pat=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+
+      - name: Build container image
+        if: ${{ !contains(runner.name, 'blacksmith') }}
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
         env:
           DOCKER_BUILD_SUMMARY: false
           DOCKER_BUILD_RECORD_UPLOAD: false
