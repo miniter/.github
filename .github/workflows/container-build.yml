@@ -86,7 +86,7 @@ jobs:
 
       - name: Calculate version
         id: version
-        uses: waynebrantley/github-dateversion@20c0ad5daab3d88585f496fd75fba9578841fa31 # v1.5
+        uses: waynebrantley/github-dateversion@500a72f15f862e94fa43605145901c858c4a2a45 # v1.6.0
 
       - name: Build container image (Blacksmith)
         if: contains(runner.name, 'blacksmith')
