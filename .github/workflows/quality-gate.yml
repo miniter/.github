@@ -37,6 +37,13 @@ on:
         required: false
         type: string
         default: "ubuntu-latest"
+    secrets:
+      NUGET_REPOSITORY_READONLY_GITHUB:
+        description: "PAT with read:packages for the miniter GitHub Packages feed. Declared so callers can pass an explicit secrets list instead of secrets: inherit."
+        required: false
+      QODANA_TOKEN:
+        description: "Qodana Cloud project token. Declared so callers can pass an explicit secrets list instead of secrets: inherit."
+        required: false
 
 permissions: {}
 
