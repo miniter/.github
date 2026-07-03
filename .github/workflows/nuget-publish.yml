@@ -56,6 +56,10 @@ on:
         required: false
         type: boolean
         default: true
+    secrets:
+      NUGET_REPOSITORY_READONLY_GITHUB:
+        description: "PAT with read:packages for the miniter GitHub Packages feed (used when add-nuget-source is true). Declared so callers can pass an explicit secrets list instead of secrets: inherit."
+        required: false
 
 permissions: {}
 
