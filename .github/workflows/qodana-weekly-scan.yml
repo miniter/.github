@@ -65,7 +65,11 @@ on:
           GITHUB_TOKEN do not trigger `on: pull_request` workflows (GitHub's recursion-prevention
           rule), so the quality-gate wouldn't run on the fix PR and nobody would notice a broken
           build. Falls back to github.token if not provided (with a workflow warning).
-          Existing miniter org-level secrets that satisfy this: `GH_PAT` (repo scope).
+
+          Miniter convention: pass `secrets.GH_REPO_READ_SECRET` (name is a misnomer — it has
+          full `repo` scope and is used for cross-repo write in dependency-dashboard-publish
+          and renovate-dashboard-prerefresh already). Confirm the secret is available in the
+          caller repo (org-level or per-repo) before relying on it.
         required: false
 
 permissions: {}
