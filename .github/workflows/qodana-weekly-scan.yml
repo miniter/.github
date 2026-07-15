@@ -66,10 +66,17 @@ on:
           rule), so the quality-gate wouldn't run on the fix PR and nobody would notice a broken
           build. Falls back to github.token if not provided (with a workflow warning).
 
-          Miniter convention: pass `secrets.GH_REPO_READ_SECRET` (name is a misnomer — it has
-          full `repo` scope and is used for cross-repo write in dependency-dashboard-publish
-          and renovate-dashboard-prerefresh already). Confirm the secret is available in the
-          caller repo (org-level or per-repo) before relying on it.
+          Recommended: provision a NEW fine-grained PAT purpose-scoped for this workflow
+          (e.g. secret name `QODANA_WEEKLY_SCAN_PAT`). Do NOT reuse `GH_REPO_READ_SECRET`
+          — that one is scoped for cross-repo cloning and issue-body PATCHes, and mixing
+          use cases enlarges blast radius on rotation.
+
+          Minimum PAT scopes (fine-grained):
+            - Repository access: the deployable repos that call this workflow
+            - Repository permissions:
+                - Contents: read/write     (push the fix branch)
+                - Pull requests: read/write (open the PR)
+                - Metadata: read            (auto)
         required: false
 
 permissions: {}
