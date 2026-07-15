@@ -1,0 +1,177 @@
+#-------------------------------------------------------------------------------#
+# Reusable workflow: scheduled full-profile Qodana scan with auto-fix PR.
+#
+# Design:
+#   - Called on cron from each repo (per-repo caller decides the day/time).
+#   - Runs the FULL qodana.recommended profile against the base branch — the
+#     PR-gate workflow (quality-gate.yml) runs a narrow bug/security profile,
+#     so this catches everything the fast gate skips.
+#   - Applies safe quick-fixes via --apply-fixes, commits to a per-week branch,
+#     opens a PR against the base branch for human review.
+#   - Idempotent: if a PR from the same week is already open, the run exits
+#     without producing another.
+#   - Findings without an auto-fix land in Qodana Cloud (dashboard), not this
+#     PR. Iteration 2 could open issues for high-severity non-auto-fixable
+#     findings if that gap proves painful.
+#
+# Auth: uses the caller repo's default GITHUB_TOKEN for branch push + PR open,
+# so no cross-repo GitHub App is required.
+#-------------------------------------------------------------------------------#
+name: Qodana Weekly Scan
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        description: ".NET SDK version"
+        required: false
+        type: string
+        default: "10.x"
+      restore-project:
+        description: "Specific .csproj to restore (empty for full solution)"
+        required: false
+        type: string
+        default: ""
+      timeout-minutes:
+        description: "Job timeout in minutes (full recommended profile is slow — allow 45+)"
+        required: false
+        type: number
+        default: 45
+      runs-on:
+        description: "Runner label"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+      base-branch:
+        description: "Branch to scan and target the fix PR against"
+        required: false
+        type: string
+        default: "master"
+      pr-labels:
+        description: "Comma-separated labels applied to the fix PR"
+        required: false
+        type: string
+        default: "qodana,automated"
+    secrets:
+      NUGET_REPOSITORY_READONLY_GITHUB:
+        description: "PAT with read:packages for the miniter GitHub Packages feed."
+        required: false
+      QODANA_TOKEN:
+        description: "Qodana Cloud project token."
+        required: false
+
+permissions: {}
+
+jobs:
+  scan-and-fix:
+    runs-on: ${{ inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Compute week identifier
+        id: week
+        run: echo "week=$(date -u +%Y-W%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Check for existing open weekly PR
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: qodana/weekly-scan-${{ steps.week.outputs.week }}
+        run: |
+          count=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$BRANCH" --json number --jq 'length')
+          if [ "$count" != "0" ]; then
+            echo "PR already open for $BRANCH — skipping this run."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.existing.outputs.skip != 'true'
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ inputs.base-branch }}
+          fetch-depth: 0
+
+      - name: Setup dotnet
+        if: steps.existing.outputs.skip != 'true'
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Restore packages
+        if: steps.existing.outputs.skip != 'true'
+        env:
+          NUGET_PAT: ${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+          NUGET_USERNAME: ${{ vars.NUGET_USERNAME }}
+          NUGET_SOURCE_URL: ${{ vars.NUGET_SOURCE_URL }}
+          RESTORE_PROJECT: ${{ inputs.restore-project }}
+        run: |
+          dotnet nuget add source --username "$NUGET_USERNAME" --password "$NUGET_PAT" --store-password-in-clear-text --name github "$NUGET_SOURCE_URL"
+          dotnet restore $RESTORE_PROJECT
+          dotnet nuget remove source github
+
+      - name: Run Qodana with auto-fix
+        if: steps.existing.outputs.skip != 'true'
+        id: qodana
+        continue-on-error: true
+        uses: JetBrains/qodana-action@4861e015da555e86a72b862892aba6c2b93e6891 # v2026.1.3
+        with:
+          pr-mode: false
+          # --apply-fixes: apply safe quick-fixes in place
+          # --fail-threshold high: don't fail the step on findings; we want any
+          # applied fixes to land in the PR even when other findings remain.
+          args: --apply-fixes,--fail-threshold=999999
+        env:
+          QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
+
+      - name: Detect fix changes
+        if: steps.existing.outputs.skip != 'true'
+        id: diff
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No auto-fixable findings this week."
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create fix PR
+        if: steps.existing.outputs.skip != 'true' && steps.diff.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEEK: ${{ steps.week.outputs.week }}
+          BASE: ${{ inputs.base-branch }}
+          LABELS: ${{ inputs.pr-labels }}
+        run: |
+          BRANCH="qodana/weekly-scan-${WEEK}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "MIN-0000 Qodana weekly scan auto-fixes (${WEEK})"
+          git push origin "$BRANCH"
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base "$BASE" \
+            --head "$BRANCH" \
+            --title "MIN-0000 Qodana weekly scan fixes (${WEEK})" \
+            --label "$LABELS" \
+            --body "$(cat <<'BODY'
+          Auto-generated by the weekly Qodana scan against the full `qodana.recommended` profile.
+
+          Findings that Qodana can quick-fix have been applied here. Please review the diff, apply any manual follow-ups, and merge if the changes look good.
+
+          Findings without an auto-fix (e.g. most CA-security rules and Potential Code Quality Issues) do not appear in this diff — check the Qodana Cloud dashboard for the full report.
+          BODY
+          )"
+
+      - name: Upload SARIF
+        if: steps.existing.outputs.skip != 'true' && always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qodana-sarif-weekly-${{ steps.week.outputs.week }}
+          path: ${{ runner.temp }}/qodana/results/qodana.sarif.json
+          retention-days: 30
