@@ -58,6 +58,15 @@ on:
       QODANA_TOKEN:
         description: "Qodana Cloud project token."
         required: false
+      PR_CREATE_TOKEN:
+        description: |
+          PAT (or GitHub App token) with contents:write + pull_requests:write on the caller repo.
+          REQUIRED for downstream CI to fire on the auto-fix PR — PRs opened via the default
+          GITHUB_TOKEN do not trigger `on: pull_request` workflows (GitHub's recursion-prevention
+          rule), so the quality-gate wouldn't run on the fix PR and nobody would notice a broken
+          build. Falls back to github.token if not provided (with a workflow warning).
+          Existing miniter org-level secrets that satisfy this: `GH_PAT` (repo scope).
+        required: false
 
 permissions: {}
 
@@ -76,7 +85,7 @@ jobs:
       - name: Check for existing open weekly PR
         id: existing
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PR_CREATE_TOKEN || github.token }}
           BRANCH: qodana/weekly-scan-${{ steps.week.outputs.week }}
         run: |
           count=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$BRANCH" --json number --jq 'length')
@@ -87,12 +96,18 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Warn if PR_CREATE_TOKEN is missing
+        if: steps.existing.outputs.skip != 'true' && !secrets.PR_CREATE_TOKEN
+        run: |
+          echo "::warning::PR_CREATE_TOKEN secret not provided — falling back to github.token. The auto-fix PR will open, but downstream on: pull_request workflows (quality-gate, etc.) will NOT fire on it, so the PR lands without CI. Recommend passing GH_PAT or an equivalent as PR_CREATE_TOKEN."
+
       - name: Checkout
         if: steps.existing.outputs.skip != 'true'
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: ${{ inputs.base-branch }}
           fetch-depth: 0
+          token: ${{ secrets.PR_CREATE_TOKEN || github.token }}
 
       - name: Setup dotnet
         if: steps.existing.outputs.skip != 'true'
@@ -140,7 +155,7 @@ jobs:
       - name: Create fix PR
         if: steps.existing.outputs.skip != 'true' && steps.diff.outputs.has_changes == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PR_CREATE_TOKEN || github.token }}
           WEEK: ${{ steps.week.outputs.week }}
           BASE: ${{ inputs.base-branch }}
           LABELS: ${{ inputs.pr-labels }}
