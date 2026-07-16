@@ -115,10 +115,12 @@ jobs:
         uses: JetBrains/qodana-action@4861e015da555e86a72b862892aba6c2b93e6891 # v2026.1.3
         with:
           pr-mode: false
-          # ${{ x && ',' }} evaluates to ',' when additional-args is truthy,
-          # empty string otherwise — keeps the arg list well-formed whether
-          # or not the caller supplies additional args.
-          args: --fail-threshold=${{ inputs.qodana-fail-threshold }}${{ inputs.qodana-additional-args && ',' }}${{ inputs.qodana-additional-args }}
+          # JetBrains/qodana-action deprecated the comma-separated args format
+          # in favor of space-separated (a workflow warning fires when commas
+          # are used). ${{ x && ' ' }} evaluates to ' ' when additional-args
+          # is truthy, empty string otherwise — keeps the arg list well-formed
+          # whether or not the caller supplies additional args.
+          args: --fail-threshold=${{ inputs.qodana-fail-threshold }}${{ inputs.qodana-additional-args && ' ' }}${{ inputs.qodana-additional-args }}
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
 
