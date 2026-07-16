@@ -17,6 +17,16 @@ on:
         required: false
         type: string
         default: "0"
+      qodana-additional-args:
+        description: |
+          Extra CLI args to append to Qodana. Empty = old behavior (runs the
+          full profile defined in the caller's qodana.yaml). Example use case:
+          pass `--profile-path=.qodana/fast-profile.yaml` to run a narrow
+          PR-gate profile without swapping the repo's qodana.yaml (which the
+          weekly full-scan in minitersystem/qodana-weekly-scan.yml reads).
+        required: false
+        type: string
+        default: ""
       timeout-minutes:
         description: "Job timeout in minutes"
         required: false
@@ -105,7 +115,10 @@ jobs:
         uses: JetBrains/qodana-action@4861e015da555e86a72b862892aba6c2b93e6891 # v2026.1.3
         with:
           pr-mode: false
-          args: --fail-threshold=${{ inputs.qodana-fail-threshold }}
+          # ${{ x && ',' }} evaluates to ',' when additional-args is truthy,
+          # empty string otherwise — keeps the arg list well-formed whether
+          # or not the caller supplies additional args.
+          args: --fail-threshold=${{ inputs.qodana-fail-threshold }}${{ inputs.qodana-additional-args && ',' }}${{ inputs.qodana-additional-args }}
         env:
           QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
 
