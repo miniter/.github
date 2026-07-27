@@ -123,4 +123,4 @@ jobs:
         env:
           NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NUGET_SOURCE_URL: ${{ vars.NUGET_SOURCE_URL }}
-        run: dotnet nuget push "$GITHUB_WORKSPACE/Artifacts"/*.nupkg -k "$NUGET_AUTH_TOKEN" -s "$NUGET_SOURCE_URL"
+        run: dotnet nuget push "$GITHUB_WORKSPACE/Artifacts"/*.nupkg -k "$NUGET_AUTH_TOKEN" -s "$NUGET_SOURCE_URL" --skip-duplicate
