@@ -1,0 +1,22 @@
+title = "Miniter Gitleaks config — secrets + PII"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "us-ssn"
+description = "US Social Security Number"
+regex = '''\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b'''
+tags = ["pii", "ssn"]
+
+[[rules]]
+id = "us-itin"
+description = "US Individual Taxpayer Identification Number"
+regex = '''\b9\d{2}-[7-9]\d-\d{4}\b'''
+tags = ["pii", "itin"]
+
+[[rules]]
+id = "us-phone"
+description = "US phone number"
+regex = '''\b(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'''
+tags = ["pii", "phone"]
