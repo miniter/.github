@@ -1,0 +1,3 @@
+
+# Claude Code Agent(isolation: "worktree") per-subagent worktrees.
+.claude/worktrees/
