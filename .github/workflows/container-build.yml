@@ -48,6 +48,16 @@ on:
         required: false
         type: string
         default: "ubuntu-latest"
+      create-release:
+        description: >-
+          Whether to push build information and create an Octopus release. Defaults to true, which is
+          the behaviour every caller had before this input existed. Set false when a push changed
+          nothing that ships in the container — a repo whose ApiClient is published as a NuGet package,
+          for example — so the image still rebuilds and stays current but no release is cut for a
+          deployable that did not change.
+        required: false
+        type: boolean
+        default: true
 
 permissions: {}
 
@@ -174,7 +184,7 @@ jobs:
           COMMIT_MSG: ${{ github.event.head_commit.message }}
 
       - name: Push build information to Octopus Deploy
-        if: github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/master' && inputs.create-release
         uses: OctopusDeploy/push-build-information-action@8f4e98c1c0dbeb31816c0153a2d3a7a1902e8910 # v4.1.4
         env:
           OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
@@ -186,7 +196,7 @@ jobs:
 
       - name: Create a release in Production for Octopus Deploy
         uses: OctopusDeploy/create-release-action@4bd7d595da7f803e467d41c32fa0b5dbb9f222dc # v4.2.1
-        if: github.ref == 'refs/heads/master'
+        if: github.ref == 'refs/heads/master' && inputs.create-release
         env:
           OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
           OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
@@ -199,7 +209,7 @@ jobs:
 
       - name: Create a release in UAT Octopus Deploy
         uses: OctopusDeploy/create-release-action@4bd7d595da7f803e467d41c32fa0b5dbb9f222dc # v4.2.1
-        if: github.ref != 'refs/heads/master'
+        if: github.ref != 'refs/heads/master' && inputs.create-release
         env:
           OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
           OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
