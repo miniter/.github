@@ -17,9 +17,3 @@ id = "us-itin"
 description = "US Individual Taxpayer Identification Number"
 regex = '''\b9\d{2}-[7-9]\d-\d{4}\b'''
 tags = ["pii", "itin"]
-
-[[rules]]
-id = "us-phone"
-description = "US phone number"
-regex = '''\b(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'''
-tags = ["pii", "phone"]
