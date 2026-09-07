@@ -105,6 +105,18 @@ jobs:
         id: version
         uses: waynebrantley/github-dateversion@500a72f15f862e94fa43605145901c858c4a2a45 # v1.6.0
 
+      - name: Compose display version
+        id: display
+        # The version that identifies the artifact (ACR tag, Octopus release and package version)
+        # must stay exactly what dateversion produced: "+" is illegal in a Docker tag, and the
+        # "-suffix" slot already carries the branch name for non-master builds, which is what
+        # Octopus channel rules match on. This SHA-bearing string is therefore only ever handed to
+        # the build as InformationalVersion, never used as a tag or a release number.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ github.sha }}
+        run: echo "value=${VERSION}+${SHA:0:7}" >> "$GITHUB_OUTPUT"
+
       - name: Build container image (Blacksmith)
         if: contains(runner.name, 'blacksmith')
         uses: useblacksmith/build-push-action@9b0579bbec7a6cad2f171596c57e7ac1e7658850 # v2.3.0
@@ -122,6 +134,8 @@ jobs:
           cache-to: ${{ inputs.docker-cache && github.ref == 'refs/heads/master' && format('type=gha,mode={0}', inputs.docker-cache-mode) || '' }}
           build-args: |
             BUILD_VERSION=${{ steps.version.outputs.version }}
+            BUILD_DISPLAY_VERSION=${{ steps.display.outputs.value }}
+            GIT_COMMIT=${{ github.sha }}
             PRODUCT_NAME=${{ inputs.product-name }}
             IS_MASTER=${{ github.ref == 'refs/heads/master' }}
           secrets: |
@@ -145,6 +159,8 @@ jobs:
           cache-to: ${{ inputs.docker-cache && github.ref == 'refs/heads/master' && format('type=gha,mode={0}', inputs.docker-cache-mode) || '' }}
           build-args: |
             BUILD_VERSION=${{ steps.version.outputs.version }}
+            BUILD_DISPLAY_VERSION=${{ steps.display.outputs.value }}
+            GIT_COMMIT=${{ github.sha }}
             PRODUCT_NAME=${{ inputs.product-name }}
             IS_MASTER=${{ github.ref == 'refs/heads/master' }}
           secrets: |
