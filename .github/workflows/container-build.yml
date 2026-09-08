@@ -126,6 +126,13 @@ jobs:
         with:
           push: false
           load: true
+          # The Dockerfiles float their base images (sdk:10.0, runtime/aspnet:10.0) and those
+          # tags move independently on each .NET patch release. With the layer cache on and
+          # pull defaulting to false, a build can compile against a fresh SDK while the final
+          # stage comes from a cached older runtime; the publish pins the SDK's runtime into
+          # runtimeconfig.json and rolls forward only, so the image aborts at startup with
+          # exit 150. Re-pulling keeps both stages on the same patch release.
+          pull: true
           tags: |
             ${{ vars.MINITER_CONTAINER_REGISTRY_PATH }}/${{ inputs.container-name }}:${{ steps.version.outputs.version }}
             ${{ github.ref == 'refs/heads/master' && format('{0}/{1}:latest', vars.MINITER_CONTAINER_REGISTRY_PATH, inputs.container-name) || '' }}
@@ -151,6 +158,13 @@ jobs:
         with:
           push: false
           load: true
+          # The Dockerfiles float their base images (sdk:10.0, runtime/aspnet:10.0) and those
+          # tags move independently on each .NET patch release. With the layer cache on and
+          # pull defaulting to false, a build can compile against a fresh SDK while the final
+          # stage comes from a cached older runtime; the publish pins the SDK's runtime into
+          # runtimeconfig.json and rolls forward only, so the image aborts at startup with
+          # exit 150. Re-pulling keeps both stages on the same patch release.
+          pull: true
           tags: |
             ${{ vars.MINITER_CONTAINER_REGISTRY_PATH }}/${{ inputs.container-name }}:${{ steps.version.outputs.version }}
             ${{ github.ref == 'refs/heads/master' && format('{0}/{1}:latest', vars.MINITER_CONTAINER_REGISTRY_PATH, inputs.container-name) || '' }}
