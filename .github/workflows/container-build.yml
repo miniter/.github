@@ -34,7 +34,7 @@ on:
         type: number
         default: 30
       docker-cache:
-        description: "Enable Docker layer caching via GHA"
+        description: "Enable Docker layer caching via GHA (GitHub-hosted runners only; Blacksmith runners cache layers on their sticky disk)"
         required: false
         type: boolean
         default: true
@@ -75,7 +75,7 @@ jobs:
 
       - name: Setup Docker Builder (Blacksmith)
         if: contains(runner.name, 'blacksmith')
-        uses: useblacksmith/setup-docker-builder@a5256a73e30f09e37e3eceb8ca36043d17621d24 # v2.1.0
+        uses: useblacksmith/setup-docker-builder@19215110ab936351210feebdfa5b440b4493e184 # v2.2.0
         with:
           # Required as of v2. v1 keyed the sticky disk on the repo name alone,
           # so repos that build more than one Dockerfile (e.g. ECommerce's web
@@ -137,8 +137,9 @@ jobs:
             ${{ vars.MINITER_CONTAINER_REGISTRY_PATH }}/${{ inputs.container-name }}:${{ steps.version.outputs.version }}
             ${{ github.ref == 'refs/heads/master' && format('{0}/{1}:latest', vars.MINITER_CONTAINER_REGISTRY_PATH, inputs.container-name) || '' }}
           file: "${{ inputs.project-folder }}/Dockerfile"
-          cache-from: ${{ inputs.docker-cache && 'type=gha' || '' }}
-          cache-to: ${{ inputs.docker-cache && github.ref == 'refs/heads/master' && format('type=gha,mode={0}', inputs.docker-cache-mode) || '' }}
+          # No cache-from/cache-to: the sticky disk set up above already serves the layer
+          # cache. type=gha here only wrote a fresh never-read blob into the caller's 10GB
+          # Actions cache on every master build, evicting its NuGet and other caches.
           build-args: |
             BUILD_VERSION=${{ steps.version.outputs.version }}
             BUILD_DISPLAY_VERSION=${{ steps.display.outputs.value }}
