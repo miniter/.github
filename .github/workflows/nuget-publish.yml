@@ -99,7 +99,12 @@ jobs:
           NUGET_PAT: ${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
           NUGET_USERNAME: ${{ vars.NUGET_USERNAME }}
           NUGET_SOURCE_URL: ${{ vars.NUGET_SOURCE_URL }}
-        run: dotnet nuget add source --username "$NUGET_USERNAME" --password "$NUGET_PAT" --store-password-in-clear-text --name github "$NUGET_SOURCE_URL"
+        # Registered in the runner's user-level config as "miniter". A repo nuget.config that maps packages to the
+        # "miniter" source clears this source but still picks up these credentials by name; a repo without one
+        # restores from it as before. The repo's own config file is never written to.
+        run: |
+          dotnet nuget list source > /dev/null
+          dotnet nuget add source --username "$NUGET_USERNAME" --password "$NUGET_PAT" --store-password-in-clear-text --name miniter --configfile "$HOME/.nuget/NuGet/NuGet.Config" "$NUGET_SOURCE_URL"
 
       - name: Run Tests
         if: inputs.run-tests
@@ -117,7 +122,7 @@ jobs:
 
       - name: Cleanup NuGet credentials
         if: always()
-        run: dotnet nuget remove source github || true
+        run: dotnet nuget remove source miniter --configfile "$HOME/.nuget/NuGet/NuGet.Config" || true
 
       - name: Publish the package to GPR
         env:

@@ -84,9 +84,11 @@ jobs:
           NUGET_SOURCE_URL: ${{ vars.NUGET_SOURCE_URL }}
           RESTORE_PROJECT: ${{ inputs.restore-project }}
         run: |
-          dotnet nuget add source --username "$NUGET_USERNAME" --password "$NUGET_PAT" --store-password-in-clear-text --name github "$NUGET_SOURCE_URL"
+          # User-level "miniter" source: see nuget-publish.yml for why this works with and without a repo nuget.config.
+          dotnet nuget list source > /dev/null
+          dotnet nuget add source --username "$NUGET_USERNAME" --password "$NUGET_PAT" --store-password-in-clear-text --name miniter --configfile "$HOME/.nuget/NuGet/NuGet.Config" "$NUGET_SOURCE_URL"
           dotnet restore $RESTORE_PROJECT
-          dotnet nuget remove source github
+          dotnet nuget remove source miniter --configfile "$HOME/.nuget/NuGet/NuGet.Config"
 
       - name: Run dotnet format
         if: ${{ inputs.enable-format }}
