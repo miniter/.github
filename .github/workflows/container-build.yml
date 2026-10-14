@@ -230,9 +230,15 @@ jobs:
           packages: ${{ inputs.container-name }}
           version: ${{ steps.version.outputs.version }}
 
+      # A Production-channel release deploys to production the moment it is created (every project's
+      # Production-channel lifecycle deploys there automatically). A master run dispatched to deploy a
+      # UAT slot must therefore cut its release in the UAT channel instead, or it ships to production as
+      # well as to the slot it named.
       - name: Create a release in Production for Octopus Deploy
         uses: OctopusDeploy/create-release-action@4bd7d595da7f803e467d41c32fa0b5dbb9f222dc # v4.2.1
-        if: github.ref == 'refs/heads/master' && inputs.create-release
+        if: >-
+          github.ref == 'refs/heads/master' && inputs.create-release
+          && !(inputs.environment != '' && inputs.action == 'Deploy')
         env:
           OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
           OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
@@ -245,7 +251,9 @@ jobs:
 
       - name: Create a release in UAT Octopus Deploy
         uses: OctopusDeploy/create-release-action@4bd7d595da7f803e467d41c32fa0b5dbb9f222dc # v4.2.1
-        if: github.ref != 'refs/heads/master' && inputs.create-release
+        if: >-
+          inputs.create-release
+          && (github.ref != 'refs/heads/master' || (inputs.environment != '' && inputs.action == 'Deploy'))
         env:
           OCTOPUS_URL: ${{ secrets.OCTOPUS_SERVER_URL }}
           OCTOPUS_API_KEY: ${{ secrets.OCTOPUS_API_KEY }}
