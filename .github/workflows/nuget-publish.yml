@@ -56,6 +56,11 @@ on:
         required: false
         type: boolean
         default: true
+      package-validation:
+        description: "Fail before publishing when a package removes or changes a public member of its last published release (ApiCompat). Packages compiled against that release would throw MissingMethodException at run time."
+        required: false
+        type: boolean
+        default: false
     secrets:
       NUGET_REPOSITORY_READONLY_GITHUB:
         description: "PAT with read:packages for the miniter GitHub Packages feed (used when add-nuget-source is true). Declared so callers can pass an explicit secrets list instead of secrets: inherit."
@@ -119,6 +124,55 @@ jobs:
           PACKAGE_VERSION: ${{ steps.version.outputs.version }}
           PROJECT_FILE: ${{ inputs.project-file }}
         run: dotnet pack $PROJECT_FILE --configuration Release --output "$GITHUB_WORKSPACE/Artifacts" /p:Version="$PACKAGE_VERSION" /p:ContinuousIntegrationBuild=true
+
+      # A change that compiles for every caller can still break the ones already compiled: changing only a return type does,
+      # and a package built against the old signature then throws MissingMethodException at run time. Each package is compared
+      # with the highest release on the feed, so a break fails here instead of in a consumer. An intentional break is declared
+      # in CompatibilitySuppressions.xml beside the project; the error says how to generate it.
+      - name: Validate against the last release
+        if: inputs.package-validation
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          NUGET_PAT: ${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+          NUGET_USERNAME: ${{ vars.NUGET_USERNAME }}
+          NUGET_SOURCE_URL: ${{ vars.NUGET_SOURCE_URL }}
+          PROJECT_FILE: ${{ inputs.project-file }}
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/apicompat"
+          dotnet tool install Microsoft.DotNet.ApiCompat.Tool --version 10.0.403 --tool-path "$tools" > /dev/null
+          # The credentials go to curl on stdin, so they are never on a command line.
+          feed() { printf 'user = "%s:%s"\n' "$NUGET_USERNAME" "$NUGET_PAT" | curl -sS -K - "$@"; }
+          base=$(feed -f "$NUGET_SOURCE_URL" | jq -r '[.resources[] | select(."@type" | startswith("PackageBaseAddress"))][0]."@id" | rtrimstr("/")')
+          suppressions="$(dirname "${PROJECT_FILE:-.}")/CompatibilitySuppressions.xml"
+          failed=0
+          for package in "$GITHUB_WORKSPACE/Artifacts"/*.nupkg; do
+            [[ "$package" == *.symbols.nupkg ]] && continue
+            id=$(unzip -p "$package" '*.nuspec' | grep -oPm1 '(?<=<id>)[^<]+')
+            lower="${id,,}"
+            status=$(feed -o "$RUNNER_TEMP/$lower.index.json" -w '%{http_code}' "$base/$lower/index.json")
+            # A package that has never been released has nothing to compare with; GitHub Packages answers 404 for it. Any other
+            # failure stops the publish rather than skipping the check.
+            if [ "$status" = 404 ]; then
+              echo "::notice::$id has no release on the feed to compare with."
+              continue
+            fi
+            [ "$status" = 200 ] || { echo "::error::Listing the releases of $id answered HTTP $status."; exit 1; }
+            release=$(jq -r '[.versions[] | select(contains("-") | not)] | sort_by(split(".") | map(tonumber)) | last // empty' "$RUNNER_TEMP/$lower.index.json")
+            if [ -z "$release" ]; then
+              echo "::notice::$id has only prereleases on the feed, so there is no release to compare with."
+              continue
+            fi
+            # The download redirects to storage; curl does not send the credentials on to the other host.
+            feed -fL -o "$RUNNER_TEMP/$lower.$release.nupkg" "$base/$lower/$release/$lower.$release.nupkg"
+            args=(package "$package" --baseline-package "$RUNNER_TEMP/$lower.$release.nupkg" --permit-unnecessary-suppressions)
+            [ -f "$suppressions" ] && args+=(--suppression-file "$suppressions")
+            if ! "$tools/apicompat" "${args[@]}"; then
+              echo "::error::$id failed validation against $release; the output above says why. A CP error is a change that breaks callers compiled against $release: restore the member, or declare the break with dotnet tool install -g Microsoft.DotNet.ApiCompat.Tool && apicompat package <new.nupkg> --baseline-package <$release.nupkg> --generate-suppression-file --suppression-output-file $suppressions"
+              failed=1
+            fi
+          done
+          exit $failed
 
       - name: Cleanup NuGet credentials
         if: always()
