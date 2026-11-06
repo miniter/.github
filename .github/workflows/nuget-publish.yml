@@ -165,6 +165,7 @@ jobs:
             fi
             # The download redirects to storage; curl does not send the credentials on to the other host.
             feed -fL -o "$RUNNER_TEMP/$lower.$release.nupkg" "$base/$lower/$release/$lower.$release.nupkg"
+            echo "Comparing $(basename "$package") with release $release"
             args=(package "$package" --baseline-package "$RUNNER_TEMP/$lower.$release.nupkg" --permit-unnecessary-suppressions)
             [ -f "$suppressions" ] && args+=(--suppression-file "$suppressions")
             if ! "$tools/apicompat" "${args[@]}"; then
