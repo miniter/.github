@@ -49,7 +49,7 @@ on:
         default: "ubuntu-latest"
     secrets:
       NUGET_REPOSITORY_READONLY_GITHUB:
-        description: "PAT with read:packages for the miniter GitHub Packages feed. Declared so callers can pass an explicit secrets list instead of secrets: inherit."
+        description: "No longer used: restores authenticate with the caller's GITHUB_TOKEN (the caller must grant packages: read). Still declared so callers that pass it keep validating."
         required: false
       QODANA_TOKEN:
         description: "Qodana Cloud project token. Declared so callers can pass an explicit secrets list instead of secrets: inherit."
@@ -63,6 +63,7 @@ jobs:
     timeout-minutes: ${{ inputs.timeout-minutes }}
     permissions:
       contents: write
+      packages: read
       checks: write
       pull-requests: write
     steps:
@@ -79,7 +80,7 @@ jobs:
 
       - name: Restore packages
         env:
-          NUGET_PAT: ${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+          NUGET_PAT: ${{ github.token }}
           NUGET_USERNAME: ${{ vars.NUGET_USERNAME }}
           NUGET_SOURCE_URL: ${{ vars.NUGET_SOURCE_URL }}
           RESTORE_PROJECT: ${{ inputs.restore-project }}
