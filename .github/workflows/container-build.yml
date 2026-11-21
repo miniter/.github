@@ -69,6 +69,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      packages: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -152,8 +153,8 @@ jobs:
             PRODUCT_NAME=${{ inputs.product-name }}
             IS_MASTER=${{ github.ref == 'refs/heads/master' }}
           secrets: |
-            MINITER_PACKAGES_PAT=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
-            nuget_pat=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+            MINITER_PACKAGES_PAT=${{ github.token }}
+            nuget_pat=${{ github.token }}
 
       - name: Build container image
         if: ${{ !contains(runner.name, 'blacksmith') }}
@@ -184,8 +185,8 @@ jobs:
             PRODUCT_NAME=${{ inputs.product-name }}
             IS_MASTER=${{ github.ref == 'refs/heads/master' }}
           secrets: |
-            MINITER_PACKAGES_PAT=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
-            nuget_pat=${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+            MINITER_PACKAGES_PAT=${{ github.token }}
+            nuget_pat=${{ github.token }}
 
       - name: Push container image to registry
         env:

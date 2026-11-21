@@ -58,7 +58,7 @@ on:
         default: true
     secrets:
       NUGET_REPOSITORY_READONLY_GITHUB:
-        description: "PAT with read:packages for the miniter GitHub Packages feed (used when add-nuget-source is true). Declared so callers can pass an explicit secrets list instead of secrets: inherit."
+        description: "No longer used: restores authenticate with the caller's GITHUB_TOKEN (the caller must grant packages: read). Still declared so callers that pass it keep validating."
         required: false
 
 permissions: {}
@@ -96,7 +96,7 @@ jobs:
       - name: Add Github Nuget Source
         if: inputs.add-nuget-source
         env:
-          NUGET_PAT: ${{ secrets.NUGET_REPOSITORY_READONLY_GITHUB }}
+          NUGET_PAT: ${{ github.token }}
           NUGET_USERNAME: ${{ vars.NUGET_USERNAME }}
           NUGET_SOURCE_URL: ${{ vars.NUGET_SOURCE_URL }}
         # Registered in the runner's user-level config as "miniter". A repo nuget.config that maps packages to the
